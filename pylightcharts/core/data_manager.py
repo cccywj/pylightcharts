@@ -1,5 +1,6 @@
 import datetime
 from PySide6.QtCore import QObject, Signal
+from .indicators import IndicatorMath # Assumes the math file exists in core/
 
 class DataManager(QObject):
     """
@@ -17,6 +18,9 @@ class DataManager(QObject):
         self._timeframe_seconds = timeframe_seconds
         self._max_capacity = max_capacity
 
+        self.active_indicators = {} # e.g. {"SMA": {"period": 14}}
+        self.indicator_data = {}    # e.g. {"SMA": [None, 150, 151...]}
+
     @property
     def timeframe(self) -> int:
         return self._timeframe_seconds
@@ -25,11 +29,39 @@ class DataManager(QObject):
         """Changes the timeframe resolution and clears the current data."""
         self._timeframe_seconds = tf_seconds
         self._data_list.clear()
+        self.indicator_data.clear() # Ensure indicator cache is cleared too
         self.data_changed.emit()
 
     def get_data_list(self) -> list[dict]:
         """Returns the active list of OHLC dictionaries."""
         return self._data_list
+
+    # --- NEW: Indicator API ---
+    def add_indicator(self, name: str, params: dict = None):
+        """Registers an indicator and triggers an initial calculation."""
+        self.active_indicators[name] = params or {}
+        self._recalculate_indicators()
+        self.data_changed.emit()
+
+    def remove_indicator(self, name: str):
+        """Unregisters an indicator and clears its cached data."""
+        if name in self.active_indicators:
+            del self.active_indicators[name]
+            if name in self.indicator_data:
+                del self.indicator_data[name]
+            self.data_changed.emit()
+
+    def _recalculate_indicators(self):
+        """Runs the math for all active indicators. Called automatically on tick/data load."""
+        if not self._data_list:
+            return
+        
+        if "SMA" in self.active_indicators:
+            period = self.active_indicators["SMA"].get("period", 14)
+            self.indicator_data["SMA"] = IndicatorMath.calculate_sma(self._data_list, period)
+            
+        if "VWAP" in self.active_indicators:
+            self.indicator_data["VWAP"] = IndicatorMath.calculate_vwap(self._data_list)
 
     def apply_new_data(self, data_list: list[dict]):
         """
@@ -38,6 +70,7 @@ class DataManager(QObject):
         """
         # Ensure we only store up to our max capacity to prevent RAM bloat
         self._data_list = data_list[-self._max_capacity:] if len(data_list) > self._max_capacity else data_list
+        self._recalculate_indicators() # Update indicators for the new dataset
         self.data_changed.emit()
 
     def update_tick(self, price: float, timestamp: datetime.datetime, volume: float = 0.0):
@@ -60,6 +93,7 @@ class DataManager(QObject):
                 "close": price,
                 "volume": volume
             })
+            self._recalculate_indicators()
             self.data_changed.emit()
             return
 
@@ -88,6 +122,7 @@ class DataManager(QObject):
             current_candle["volume"] += volume
             
         # 4. Notify the UI
+        self._recalculate_indicators() # Update indicators for the live tick
         self.data_changed.emit()
 
     def get_visible_data(self, left_index: int, right_index: int) -> list[dict]:

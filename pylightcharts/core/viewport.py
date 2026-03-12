@@ -27,6 +27,11 @@ class Viewport(QObject):
         self.view_mid_price = 0.0
         self.view_price_range = 1.0
 
+        # --- Crosshair State ---
+        self.crosshair_x = -1.0
+        self.crosshair_y = -1.0
+        self.crosshair_visible = False
+
     @property
     def total_space(self) -> float:
         """Helper to get the total pixel width of one candle + its spacing."""
@@ -118,4 +123,20 @@ class Viewport(QObject):
 
     def set_auto_scale(self, state: bool):
         self.auto_scale = state
+        self.viewport_changed.emit()
+
+    # ==========================================
+    # CROSSHAIR
+    # ==========================================
+
+    def update_crosshair(self, x: float, y: float):
+        """Updates the logical crosshair position and triggers a render."""
+        self.crosshair_x = x
+        self.crosshair_y = y
+        self.crosshair_visible = True
+        self.viewport_changed.emit()
+
+    def hide_crosshair(self):
+        """Hides the crosshair when the mouse leaves the widget."""
+        self.crosshair_visible = False
         self.viewport_changed.emit()
