@@ -40,6 +40,8 @@ class AxisView(BaseView):
         painter.setPen(self.text_color)
         grid_lines = 5
         display_min = v_mid - (v_range / 2.0)
+
+        prec = data_manager.price_precision
         
         for i in range(grid_lines + 1):
             p = display_min + (v_range / grid_lines) * i

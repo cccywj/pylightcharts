@@ -21,6 +21,8 @@ class DataManager(QObject):
         self.active_indicators = {} # e.g. {"SMA": {"period": 14}}
         self.indicator_data = {}    # e.g. {"SMA": [None, 150, 151...]}
 
+        self.price_precision = 2
+
     @property
     def timeframe(self) -> int:
         return self._timeframe_seconds
@@ -70,6 +72,10 @@ class DataManager(QObject):
         """
         # Ensure we only store up to our max capacity to prevent RAM bloat
         self._data_list = data_list[-self._max_capacity:] if len(data_list) > self._max_capacity else data_list
+
+        if self._data_list:
+            self.price_precision = self._calculate_precision(self._data_list[-1]['close'])
+
         self._recalculate_indicators() # Update indicators for the new dataset
         self.data_changed.emit()
 
@@ -78,6 +84,10 @@ class DataManager(QObject):
         Processes a live tick from a network stream (like ib_async).
         Aggregates the tick into the current candle or creates a new one.
         """
+        new_precision = self._calculate_precision(price)
+        if new_precision > self.price_precision:
+            self.price_precision = new_precision
+
         # 1. Floor timestamp to the nearest timeframe boundary
         ts = timestamp.timestamp()
         floored_ts = (ts // self._timeframe_seconds) * self._timeframe_seconds
@@ -137,3 +147,15 @@ class DataManager(QObject):
             return []
             
         return self._data_list[left_index : right_index + 1]
+    
+    def _calculate_precision(self, price: float) -> int:
+        """Determines the number of decimal places in a float."""
+        s = str(price)
+        if 'e' in s.lower(): # Handle scientific notation for tiny crypto prices
+            return 8
+        if '.' in s:
+            # Count digits after the decimal, ignoring trailing zeros
+            decimals = len(s.rstrip('0').split('.')[1])
+            # Enforce a minimum of 2 and maximum of 8
+            return min(max(decimals, 2), 8)
+        return 2
