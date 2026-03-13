@@ -1,16 +1,14 @@
 import sys
 import random
 import datetime
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QHBoxLayout, QWidget
 from PySide6.QtCore import QTimer
 
-# Import your library component
 from pylightcharts import PyLightChartWidget
 
-def generate_mock_data(num_candles=200, tf_seconds=60):
-    """Generates mock historical data, scaling volatility by timeframe."""
+def generate_mock_data(num_candles=200, tf_seconds=60, base_price=150.00):
     data = []
-    price = 150.00
+    price = base_price
     now = datetime.datetime.now(datetime.UTC)
     base_time = now - datetime.timedelta(seconds=num_candles * tf_seconds)
     volatility = 0.05 * (tf_seconds ** 0.5)
@@ -30,58 +28,65 @@ def generate_mock_data(num_candles=200, tf_seconds=60):
         price = close_p
     return data
 
-
 class TradingApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PyLightCharts - Final Architecture")
+        self.setWindowTitle("PyLightCharts - Gapless Buffer Test")
         self.resize(1100, 700)
         
-        # 1. Instantiate the chart library widget directly
         self.chart = PyLightChartWidget()
         self.setCentralWidget(self.chart)
         
-        # 2. Connect Library Hooks to App Logic
-        # When the user clicks "5m", the chart tells us so we can fetch 5m data!
-        self.chart.timeframe_requested.connect(self.fetch_historical_data)
+        # Connect to the new Data Hook
+        self.chart.historical_data_requested.connect(self.on_chart_requested_data)
         
-        # 3. Initialize default state
-        self.current_tf = 60
-        self.chart.set_timeframe(self.current_tf)
-        self.fetch_historical_data(self.current_tf)
+        self.current_price = 150.00
         
-        # Live Tick Simulator
+        # Simulate Live Tick Stream (fires 4 times a second, continuously)
         self.tick_timer = QTimer(self)
         self.tick_timer.timeout.connect(self.on_live_tick)
         self.tick_timer.start(250)
 
-    def fetch_historical_data(self, tf_seconds):
-        """Hook triggered when user selects a new timeframe inside the chart's toolbar."""
-        print(f"[Main App] Fetching historical data for timeframe: {tf_seconds}s")
-        self.current_tf = tf_seconds
+        # Trigger the initial load!
+        self.chart.change_symbol("AAPL")
+
+    def on_chart_requested_data(self, symbol, timeframe):
+        print(f"[Main App] Hook fired! Requesting history for {symbol} at {timeframe}s")
         
-        # In the future, this is where you call ib_async to get historical bars!
-        history = generate_mock_data(300, tf_seconds)
+        # Change our mock base price so we can see the symbol changed
+        self.current_price = random.uniform(10.0, 500.0)
+        print(f"[Main App] Waiting 2 seconds for historical data... (Live ticks are buffering!)")
+        
+        # Simulate a 2-second network delay from IBKR
+        QTimer.singleShot(2000, lambda: self._simulate_ibkr_response(timeframe))
+
+    def _simulate_ibkr_response(self, timeframe):
+        print("[Main App] Historical data arrived! Pushing to chart.")
+        history = generate_mock_data(300, timeframe, base_price=self.current_price)
         self.current_price = history[-1]['close']
         
-        # Pass the newly fetched data back into the chart
-        self.chart.apply_new_data(history)
+        # Hand it to the chart. It will auto-merge with the 2 seconds of buffered live ticks.
+        self.chart.apply_historical_data(history)
 
     def on_live_tick(self):
-        """Simulates a live market tick."""
-        volatility = 0.05 * (self.current_tf ** 0.5)
+        volatility = 0.05 * (self.chart.data_manager.timeframe ** 0.5)
         self.current_price += random.uniform(-volatility, volatility)
-        self.current_price = round(self.current_price, 2)
         
-        now = datetime.datetime.now(datetime.UTC)
+        live_bar = {
+            "time": datetime.datetime.now(datetime.UTC),
+            "open": self.current_price,
+            "high": self.current_price + 0.01,
+            "low": self.current_price - 0.01,
+            "close": self.current_price,
+            "volume": random.randint(1, 15)
+        }
         
-        # Feed the live tick into the chart (including simulated volume)
-        self.chart.update_data(self.current_price, now, volume=random.randint(1, 15))
-
+        # Feed exactly as you would an ib_async bar
+        self.chart.update_live_bar(live_bar)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setStyle("Fusion") # Guarantees the dark-theme dropdowns look correct on Windows/Mac
+    app.setStyle("Fusion") 
     window = TradingApp()
     window.show()
     sys.exit(app.exec())
