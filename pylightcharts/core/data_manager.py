@@ -81,7 +81,7 @@ class DataManager(QObject):
         # 1. Floor timestamp to the nearest timeframe boundary
         ts = timestamp.timestamp()
         floored_ts = (ts // self._timeframe_seconds) * self._timeframe_seconds
-        bucket_time = datetime.datetime.fromtimestamp(floored_ts)
+        bucket_time = datetime.datetime.fromtimestamp(floored_ts, tz=datetime.timezone.utc)
 
         # 2. If list is empty, start the first candle
         if not self._data_list:

@@ -57,7 +57,9 @@ class CrosshairView(BaseView):
             viewport.crosshair_y, viewport.view_mid_price, 
             viewport.view_price_range, chart_height
         )
-        painter.fillRect(chart_width, int(viewport.crosshair_y) - 10, viewport.margin_right, 20, self.label_bg_color)
+
+        label_width = viewport.margin_right - 8
+        painter.fillRect(chart_width, int(viewport.crosshair_y) - 10, label_width, 20, self.label_bg_color)
         painter.setPen(QPen(self.text_color))
         painter.drawText(chart_width + 5, int(viewport.crosshair_y) + 4, f"{hover_price:.2f}")
 

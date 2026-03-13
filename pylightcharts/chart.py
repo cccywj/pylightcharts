@@ -12,6 +12,7 @@ from pylightcharts.views.crosshair_view import CrosshairView
 from pylightcharts.views.tooltip_view import TooltipView
 from pylightcharts.views.indicator_view import IndicatorLineView
 from pylightcharts.views.volume_view import VolumeView
+from pylightcharts.views.live_price_view import LivePriceView
 
 # ==========================================
 # INTERNAL CANVAS (Handles the Drawing)
@@ -33,6 +34,7 @@ class _ChartCanvas(QWidget):
         self.vwap_view = IndicatorLineView("VWAP", "#E0D714") # Yellow VWAP line
         
         self.axis_view = AxisView()
+        self.live_price_view = LivePriceView()
         self.crosshair_view = CrosshairView()
         self.tooltip_view = TooltipView()
         
@@ -127,6 +129,8 @@ class _ChartCanvas(QWidget):
         
         # 3. Axes and Borders
         self.axis_view.draw(painter, self.viewport, self.data_manager, chart_w, chart_h)
+
+        self.live_price_view.draw(painter, self.viewport, self.data_manager, chart_w, chart_h)
         
         # 4. Crosshair and Floating Labels
         self.crosshair_view.draw(painter, self.viewport, self.data_manager, chart_w, chart_h)

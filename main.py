@@ -11,7 +11,7 @@ def generate_mock_data(num_candles=200, tf_seconds=60):
     """Generates mock historical data, scaling volatility by timeframe."""
     data = []
     price = 150.00
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.UTC)
     base_time = now - datetime.timedelta(seconds=num_candles * tf_seconds)
     volatility = 0.05 * (tf_seconds ** 0.5)
     
@@ -73,7 +73,7 @@ class TradingApp(QMainWindow):
         self.current_price += random.uniform(-volatility, volatility)
         self.current_price = round(self.current_price, 2)
         
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(datetime.UTC)
         
         # Feed the live tick into the chart (including simulated volume)
         self.chart.update_data(self.current_price, now, volume=random.randint(1, 15))
