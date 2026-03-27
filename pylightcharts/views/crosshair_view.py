@@ -82,10 +82,11 @@ class CrosshairView(BaseView):
         # Clamp to valid data range
         hovered_idx = max(0, min(data_length - 1, hovered_idx))
 
-        # --- STEP 2: Snap the X position to the nearest candle center ---
-        # This ensures precise alignment with the data point
-        snap_x = CoordinateEngine.index_to_x(
-            hovered_idx,
+        # --- STEP 2: Snap the X position to the bar time (same as candles / grid) ---
+        snap_x = CoordinateEngine.time_to_x(
+            data_list[hovered_idx]["time"],
+            data_list,
+            data_manager.timeframe,
             data_length,
             viewport.scroll_index_offset,
             viewport.total_space,

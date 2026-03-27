@@ -62,6 +62,7 @@ class CandleView(BaseView):
         t_space = viewport.total_space
         r_blank = viewport.right_blank_space
         c_width = viewport.candle_width
+        tf_sec = data_manager.timeframe
 
         # --- STEP 4: Draw candles from right to left (newest to oldest) ---
         # This order allows early exit when we scroll off the left edge
@@ -72,9 +73,16 @@ class CandleView(BaseView):
             d = data_list[i]
 
             # --- Coordinate Transformation ---
-            # Convert data index to pixel X coordinate
-            x_center = CoordinateEngine.index_to_x(
-                i, data_length, scroll, t_space, r_blank, chart_width
+            # X from bar time so candles align with time-based grid lines
+            x_center = CoordinateEngine.time_to_x(
+                d["time"],
+                data_list,
+                tf_sec,
+                data_length,
+                scroll,
+                t_space,
+                r_blank,
+                chart_width,
             )
 
             # Stop drawing if we've scrolled off the left edge

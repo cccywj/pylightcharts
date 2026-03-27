@@ -15,7 +15,7 @@ class AxisView(BaseView):
     
     This view handles two independent tasks:
     1. Right margin Y-axis: Price level labels with automatic tick spacing
-    2. Bottom margin X-axis: Time labels with magnetic snapping to candle centers
+    2. Bottom margin X-axis: Time labels on wall-clock aligned grid (1m, 5m, 15m, …)
     
     The axis uses "nice" step values to ensure labels are round numbers and
     don't overlap, providing a clean professional appearance.
@@ -27,22 +27,6 @@ class AxisView(BaseView):
         self.text_color = QColor("#B2B5BE")  # Light gray text
         self.axis_line_color = QColor("#2A2E39")  # Dark gray dividers
         self.font = QFont("Trebuchet MS", 9)  # TradingView-style font
-
-    def _get_time_format(self, tf_seconds: int) -> str:
-        """Return the appropriate datetime format string based on timeframe.
-        
-        Args:
-            tf_seconds: Timeframe in seconds.
-            
-        Returns:
-            A strftime-compatible format string (e.g., '%H:%M' for minute/hourly).
-        """
-        if tf_seconds >= 86400: # Daily
-            return '%Y-%m-%d'
-        elif tf_seconds >= 60:  # Minute/Hourly
-            return '%H:%M'
-        else:                   # Seconds
-            return '%H:%M:%S'
 
     def draw(
         self,
@@ -108,28 +92,35 @@ class AxisView(BaseView):
         if data_length == 0:
             return
 
-        # Get the visible range and viewport parameters for coordinate math
-        left_idx, right_idx = viewport.get_visible_indices(chart_width, data_length)
         scroll = viewport.scroll_index_offset
         t_space = viewport.total_space
         r_blank = viewport.right_blank_space
-        time_fmt = self._get_time_format(data_manager.timeframe)
+        tf_sec = data_manager.timeframe
 
-        # Draw time labels at 80-pixel intervals to avoid crowding
-        last_drawn_x = chart_width + 80
+        i0 = CoordinateEngine.x_to_float_index(
+            0, data_length, scroll, t_space, r_blank, chart_width
+        )
+        i1 = CoordinateEngine.x_to_float_index(
+            chart_width, data_length, scroll, t_space, r_blank, chart_width
+        )
+        t0 = CoordinateEngine.float_index_to_time(i0, data_list, tf_sec)
+        t1 = CoordinateEngine.float_index_to_time(i1, data_list, tf_sec)
+        span_sec = abs((t1 - t0).total_seconds())
+        step_sec = float(
+            CoordinateEngine.choose_time_grid_step_seconds(span_sec, chart_width)
+        )
 
-        for i in range(right_idx, left_idx - 1, -1):
-            # Convert data index to pixel coordinate
-            x_center = CoordinateEngine.index_to_x(
-                i, data_length, scroll, t_space, r_blank, chart_width
+        for tick in CoordinateEngine.iter_aligned_time_ticks(t0, t1, step_sec):
+            x = CoordinateEngine.time_to_x(
+                tick,
+                data_list,
+                tf_sec,
+                data_length,
+                scroll,
+                t_space,
+                r_blank,
+                chart_width,
             )
-
-            # Stop when we scroll off the left edge
-            if x_center < 0:
-                break
-
-            # Only draw if we have 80+ pixels since the last label
-            if last_drawn_x - x_center >= 80:
-                time_str = data_list[i]["time"].strftime(time_fmt)
-                painter.drawText(int(x_center) - 25, chart_height + 20, time_str)
-                last_drawn_x = x_center
+            if 0 <= x <= chart_width:
+                time_str = CoordinateEngine.format_time_axis_label(tick, step_sec)
+                painter.drawText(int(x) - 25, chart_height + 20, time_str)

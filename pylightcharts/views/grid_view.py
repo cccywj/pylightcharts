@@ -14,8 +14,8 @@ class GridView(BaseView):
     """Renders background grid lines for reference.
     
     The grid is used to provide visual reference for both price levels
-    (horizontal lines) and time intervals (vertical lines). Grid spacing
-    automatically adjusts based on zoom level to maintain clarity.
+    (horizontal lines) and time (vertical lines on wall-clock aligned steps).
+    Horizontal spacing follows price zoom; vertical steps follow time zoom.
     """
 
     def __init__(self) -> None:
@@ -64,30 +64,40 @@ class GridView(BaseView):
             current_y += step  # Move to next grid line
 
         # --- STEP 2: Draw Vertical Grid Lines (Time Intervals) ---
-        # These provide reference lines for reading time/dates
+        # Wall-clock aligned (e.g. 9:00, 9:15); step follows zoom via nice intervals
         data_list = data_manager.get_data_list()
         data_length = len(data_list)
         if data_length == 0:
             return
 
-        left_idx, right_idx = viewport.get_visible_indices(chart_width, data_length)
-
-        # Cache viewport parameters for coordinate math
         scroll = viewport.scroll_index_offset
         t_space = viewport.total_space
         r_blank = viewport.right_blank_space
+        tf_sec = data_manager.timeframe
 
-        # Space vertical lines every 80 pixels to avoid crowding
-        last_drawn_x = chart_width + 80
+        i0 = CoordinateEngine.x_to_float_index(
+            0, data_length, scroll, t_space, r_blank, chart_width
+        )
+        i1 = CoordinateEngine.x_to_float_index(
+            chart_width, data_length, scroll, t_space, r_blank, chart_width
+        )
+        t0 = CoordinateEngine.float_index_to_time(i0, data_list, tf_sec)
+        t1 = CoordinateEngine.float_index_to_time(i1, data_list, tf_sec)
+        span_sec = abs((t1 - t0).total_seconds())
+        step_sec = float(
+            CoordinateEngine.choose_time_grid_step_seconds(span_sec, chart_width)
+        )
 
-        for i in range(right_idx, left_idx - 1, -1):
-            x_center = CoordinateEngine.index_to_x(
-                i, data_length, scroll, t_space, r_blank, chart_width
+        for tick in CoordinateEngine.iter_aligned_time_ticks(t0, t1, step_sec):
+            x = CoordinateEngine.time_to_x(
+                tick,
+                data_list,
+                tf_sec,
+                data_length,
+                scroll,
+                t_space,
+                r_blank,
+                chart_width,
             )
-
-            if x_center < 0:
-                break
-
-            if last_drawn_x - x_center >= 80:
-                painter.drawLine(int(x_center), 0, int(x_center), chart_height)
-                last_drawn_x = x_center
+            if 0 <= x <= chart_width:
+                painter.drawLine(int(x), 0, int(x), chart_height)

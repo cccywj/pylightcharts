@@ -66,9 +66,12 @@ class VolumeView(BaseView):
         scroll = viewport.scroll_index_offset
         t_space = viewport.total_space
         r_blank = viewport.right_blank_space
+        tf_sec = data_manager.timeframe
 
         # --- STEP 2: Draw volume bars for all visible candles ---
         for i in range(right_idx, left_idx - 1, -1):
+            if i < 0 or i >= data_length:
+                continue
             d = data_list[i]
             vol = d.get("volume", 0)
             if vol <= 0:
@@ -77,9 +80,15 @@ class VolumeView(BaseView):
             # Scale volume proportionally to the maximum
             h_px = (vol / max_vol) * max_height_px
 
-            # Convert data index to pixel coordinate
-            x_center = CoordinateEngine.index_to_x(
-                i, data_length, scroll, t_space, r_blank, chart_width
+            x_center = CoordinateEngine.time_to_x(
+                d["time"],
+                data_list,
+                tf_sec,
+                data_length,
+                scroll,
+                t_space,
+                r_blank,
+                chart_width,
             )
             if x_center + (viewport.candle_width / 2.0) < 0:
                 break  # Stop drawing when off the left edge

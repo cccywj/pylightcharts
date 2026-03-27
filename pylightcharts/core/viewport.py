@@ -57,7 +57,8 @@ class Viewport(QObject):
         # ==========================================
         self.margin_right = 85     # Space for price labels on the right
         self.margin_bottom = 30    # Space for time labels at the bottom
-        self.right_blank_space = 100.0  # Extra padding to keep latest candle away from edge
+        self.right_blank_space = 0.0  # Inset from chart right (0 = data may use full plot width)
+        self.default_right_gap_px = 100.0  # Default empty space to the right of the latest bar (via scroll)
         
         # ==========================================
         # X-AXIS (Time) STATE
@@ -65,7 +66,6 @@ class Viewport(QObject):
         self.default_candle_width = 8.0    # Initial width of each candlestick
         self.candle_width = self.default_candle_width  # Current width (can change via zoom)
         self.candle_spacing = 2.0          # Gap between candlesticks
-        self.scroll_index_offset = 0.0     # Pan offset in candle units (fractional)
         
         # ==========================================
         # Y-AXIS (Price) STATE
@@ -80,6 +80,15 @@ class Viewport(QObject):
         self.crosshair_x = -1.0            # X-pixel position of crosshair (-1 = hidden)
         self.crosshair_y = -1.0            # Y-pixel position of crosshair
         self.crosshair_visible = False     # Whether crosshair is currently drawn
+
+        self.scroll_index_offset = self._default_scroll_index_offset()
+
+    def _default_scroll_index_offset(self) -> float:
+        """Negative scroll so the latest bar sits ~default_right_gap_px left of the plot right edge."""
+        ts = self.candle_width + self.candle_spacing
+        if ts <= 0:
+            return 0.0
+        return -self.default_right_gap_px / ts
 
     @property
     def total_space(self) -> float:
@@ -108,11 +117,12 @@ class Viewport(QObject):
         Pan the chart left or right based on mouse movement.
         
         Converts pixel movement into candle offset and updates scroll_index_offset.
-        Constrains panning so you can't scroll infinitely past data bounds.
+        Panning to the right (into empty / future space) is unbounded below zero.
+        Panning into history is still capped when data exists.
         
         Args:
             dx_pixels: Pixel movement (+right, -left)
-            max_index: Total number of candles (prevents panning past end)
+            max_index: Total number of candles (caps pan into past; ignored if 0)
         
         Examples:
             >>> vp.pan_x(50, max_index=300)  # Move right 50 pixels
@@ -121,8 +131,8 @@ class Viewport(QObject):
         shift_in_candles = dx_pixels / self.total_space
         self.scroll_index_offset += shift_in_candles
         
-        # Constrain bounds: can't scroll past beginning or far future
-        self.scroll_index_offset = max(0.0, min(float(max_index), self.scroll_index_offset))
+        if max_index > 0:
+            self.scroll_index_offset = min(float(max_index), self.scroll_index_offset)
         self.viewport_changed.emit()
 
     def zoom_x(self, zoom_step: float) -> None:
@@ -143,7 +153,7 @@ class Viewport(QObject):
             >>> vp.zoom_x(1.0)   # Zoom in (wider candles)
             >>> vp.zoom_x(-1.0)  # Zoom out (narrower candles)
         """
-        self.auto_scale = False  # Manual zoom breaks auto-scale
+        # self.auto_scale = False  # Manual zoom breaks auto-scale
         self.candle_width = max(1.0, min(50.0, self.candle_width + zoom_step))
         self.viewport_changed.emit()
 
@@ -164,17 +174,14 @@ class Viewport(QObject):
         Note:
             - right_index is always the most recent candle(s)
             - Adds 2 extra candles on edges for smoother clipping
-            - Returns (0, 0) if no data
+            - With no candles, indices are virtual (right_idx may be negative)
         
         Examples:
             >>> chart_width = 1000
             >>> left, right = vp.get_visible_indices(1000, 300)
             >>> vp.apply_auto_scale(data[left:right+1])
         """
-        if data_length == 0:
-            return 0, 0
-            
-        # The latest candle is always at the right edge
+        # The latest candle is always at the right edge (virtual index when panned into future)
         right_idx = data_length - 1 - int(self.scroll_index_offset)
         
         # How many candles fit in the visible area?
@@ -265,7 +272,7 @@ class Viewport(QObject):
         v_range = v_max - v_min if v_max != v_min else 1.0
         
         # Add 10% padding so candles don't touch edges
-        self.view_price_range = v_range * 1.1 
+        self.view_price_range = v_range * 1.3
         self.view_mid_price = v_min + (v_range / 2.0)
 
     # ==========================================
@@ -276,14 +283,14 @@ class Viewport(QObject):
         """
         Reset viewport to initial state.
         
-        - Snaps to the latest candle (scroll_index_offset = 0)
+        - Snaps to the latest candle with default right gap (see default_right_gap_px)
         - Enables auto-scale (Y-axis fits data)
         - Resets candle width to default
         - Hides crosshair
         """
         self.auto_scale = True
-        self.scroll_index_offset = 0.0
         self.candle_width = self.default_candle_width
+        self.scroll_index_offset = self._default_scroll_index_offset()
         self.crosshair_visible = False
         self.viewport_changed.emit()
 

@@ -140,6 +140,21 @@ class DataManager(QObject):
             return dt.replace(tzinfo=datetime.timezone.utc)
         return dt.astimezone(datetime.timezone.utc)
 
+    def _floor_time_to_timeframe(self, dt: datetime.datetime) -> datetime.datetime:
+        """
+        Snap a bar open time to the start of its timeframe bucket in UTC.
+
+        Matches live tick handling in update_tick() so historical and live candles
+        share the same global bucket times for chart alignment.
+        """
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        else:
+            dt = dt.astimezone(datetime.timezone.utc)
+        ts = dt.timestamp()
+        floored_ts = (ts // self._timeframe_seconds) * self._timeframe_seconds
+        return datetime.datetime.fromtimestamp(floored_ts, tz=datetime.timezone.utc)
+
     def _parse_ib_bar(self, bar: Union[Dict[str, Any], Any]) -> Dict[str, Any]:
         """
         Parse an OHLCV bar from ib_async.BarData or a plain dictionary.
@@ -168,8 +183,9 @@ class DataManager(QObject):
         """
         if isinstance(bar, dict):
             raw_time = bar.get('date', bar.get('time'))
+            t = self._floor_time_to_timeframe(self._ensure_utc_aware(raw_time))
             return {
-                "time": self._ensure_utc_aware(raw_time),
+                "time": t,
                 "open": float(bar.get('open', 0.0)),
                 "high": float(bar.get('high', 0.0)),
                 "low": float(bar.get('low', 0.0)),
@@ -179,8 +195,9 @@ class DataManager(QObject):
         else:
             # ib_async.BarData object: use getattr with fallbacks
             raw_time = getattr(bar, 'date', getattr(bar, 'time', None))
+            t = self._floor_time_to_timeframe(self._ensure_utc_aware(raw_time))
             return {
-                "time": self._ensure_utc_aware(raw_time),
+                "time": t,
                 "open": float(getattr(bar, 'open', 0.0)),
                 "high": float(getattr(bar, 'high', 0.0)),
                 "low": float(getattr(bar, 'low', 0.0)),
@@ -404,9 +421,7 @@ class DataManager(QObject):
         if not parsed_tick['close'] or parsed_tick['close'] == 0.0:
             return
             
-        ts = parsed_tick['time'].timestamp()
-        floored_ts = (ts // self._timeframe_seconds) * self._timeframe_seconds
-        bucket_time = datetime.datetime.fromtimestamp(floored_ts, tz=datetime.timezone.utc)
+        bucket_time = self._floor_time_to_timeframe(parsed_tick['time'])
         parsed_tick['time'] = bucket_time
 
         if self._is_buffering:

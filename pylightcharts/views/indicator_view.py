@@ -56,7 +56,8 @@ class IndicatorLineView(BaseView):
             return
 
         values = data_manager.indicator_data[self.indicator_name]
-        data_length = len(data_manager.get_data_list())
+        data_list = data_manager.get_data_list()
+        data_length = len(data_list)
         if not values or data_length == 0:
             return
 
@@ -68,20 +69,32 @@ class IndicatorLineView(BaseView):
         scroll = viewport.scroll_index_offset
         t_space = viewport.total_space
         r_blank = viewport.right_blank_space
+        tf_sec = data_manager.timeframe
+
+        i_lo = max(0, left_idx)
+        i_hi = min(data_length - 1, right_idx)
+        if i_lo > i_hi:
+            return
 
         last_point = None
 
         # Draw line segments left to right for visible data
-        for i in range(left_idx, right_idx + 1):
+        for i in range(i_lo, i_hi + 1):
             val = values[i]
             if val is None:
                 # Break the line at gaps (warm-up periods, missing data)
                 last_point = None
                 continue
 
-            # Convert data coordinates to pixel coordinates
-            x = CoordinateEngine.index_to_x(
-                i, data_length, scroll, t_space, r_blank, chart_width
+            x = CoordinateEngine.time_to_x(
+                data_list[i]["time"],
+                data_list,
+                tf_sec,
+                data_length,
+                scroll,
+                t_space,
+                r_blank,
+                chart_width,
             )
             y = CoordinateEngine.price_to_y(val, v_mid, v_range, chart_height)
 

@@ -95,14 +95,15 @@ class _ChartCanvas(QWidget):
             event: Qt mouse event.
         """
         if event.button() == Qt.LeftButton:
-            pos = event.position().toPoint()
+            pos = event.position()
+            px, py = int(pos.x()), int(pos.y())
             chart_w = self.width() - self.viewport.margin_right
             chart_h = self.height() - self.viewport.margin_bottom
 
             # Simple hit testing for axis vs chart area
-            if pos.x() > chart_w and pos.y() < chart_h:
+            if px > chart_w and py < chart_h:
                 self.drag_mode = "y_axis"
-            elif pos.x() < chart_w and pos.y() > chart_h:
+            elif px < chart_w and py > chart_h:
                 self.drag_mode = "x_axis"
             else:
                 self.drag_mode = "chart"
